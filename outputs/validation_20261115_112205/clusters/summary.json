@@ -1,0 +1,25 @@
+{
+  "feature_file": "data/features/both_concat.npz",
+  "feature_sherds": 17580,
+  "total_sherds": 17609,
+  "added_singletons": 29,
+  "k": 10,
+  "eta": 0.5,
+  "rho": 0.55,
+  "mutual": true,
+  "max_cluster_size_limit": null,
+  "labels_read": false,
+  "neighbor_rule": "mutual kNN",
+  "eligible_edges": 45214,
+  "clusters": 8128,
+  "singletons": 2877,
+  "max_cluster_size": 16,
+  "intra_cluster_pairs": 17225,
+  "minimum_similarity": 0.5500000715255737,
+  "merge_decisions": {
+    "accepted": 9481,
+    "already_same": 2378,
+    "rejected_all_pairs": 33355
+  },
+  "seconds": 57.268563475459814
+}

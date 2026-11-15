@@ -1,0 +1,22 @@
+{
+  "image_dir": "data/images",
+  "output": "outputs/train",
+  "imagenet_weights": "weights/resnet50_imagenet1k_v2.pth",
+  "epochs": 100,
+  "stop_after_epoch": 15,
+  "batch_size": 32,
+  "image_size": 320,
+  "lr": 0.0003,
+  "backbone_lr": 0.0001,
+  "view_policy": "full_global",
+  "weight_decay": 0.0001,
+  "momentum": 0.996,
+  "freeze_through": "none",
+  "amp": "none",
+  "workers": 4,
+  "seed": 42,
+  "checkpoint_every": 5,
+  "monitor_size": 1600,
+  "monitor_every": 5,
+  "min_feature_std": 0.01
+}

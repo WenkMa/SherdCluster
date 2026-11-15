@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+/data/images/
+/outputs/*
+!/outputs/validation_20261115_112205/
+/weights/*.pt
+/weights/*.pth
+/data/features/*.npz

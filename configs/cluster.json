@@ -1,0 +1,8 @@
+{
+  "features": "outputs/features/both_concat.npz",
+  "collection_ids": "data/collection_ids.txt",
+  "output": "outputs/clusters",
+  "k": 10,
+  "eta": 0.5,
+  "rho": 0.55
+}

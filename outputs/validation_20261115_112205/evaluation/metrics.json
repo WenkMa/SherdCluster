@@ -1,0 +1,72 @@
+{
+  "representation": [
+    {
+      "feature_file": "data/features/exterior.npz",
+      "gallery_size": 17580,
+      "query_count": 485,
+      "reference_pairs": 251,
+      "dimension": 2048,
+      "self_excluded": true,
+      "tie_break": "descending cosine, lexical sherd ID",
+      "hit_counts": {
+        "1": 147,
+        "5": 250,
+        "10": 297
+      },
+      "hit_percent": {
+        "1": 30.309278350515463,
+        "5": 51.546391752577314,
+        "10": 61.23711340206186
+      }
+    },
+    {
+      "feature_file": "data/features/interior.npz",
+      "gallery_size": 17580,
+      "query_count": 485,
+      "reference_pairs": 251,
+      "dimension": 2048,
+      "self_excluded": true,
+      "tie_break": "descending cosine, lexical sherd ID",
+      "hit_counts": {
+        "1": 103,
+        "5": 177,
+        "10": 227
+      },
+      "hit_percent": {
+        "1": 21.237113402061855,
+        "5": 36.49484536082474,
+        "10": 46.8041237113402
+      }
+    },
+    {
+      "feature_file": "data/features/both_concat.npz",
+      "gallery_size": 17580,
+      "query_count": 485,
+      "reference_pairs": 251,
+      "dimension": 4096,
+      "self_excluded": true,
+      "tie_break": "descending cosine, lexical sherd ID",
+      "hit_counts": {
+        "1": 256,
+        "5": 367,
+        "10": 397
+      },
+      "hit_percent": {
+        "1": 52.78350515463918,
+        "5": 75.6701030927835,
+        "10": 81.85567010309278
+      }
+    }
+  ],
+  "clustering": {
+    "total_sherds": 17609,
+    "clusters": 8128,
+    "singletons": 2877,
+    "non_singleton_clusters": 5251,
+    "max_cluster_size": 16,
+    "intra_cluster_pairs": 17225,
+    "reference_pairs": 251,
+    "retained_pairs": 154,
+    "retention_percent": 61.354581673306775
+  }
+}

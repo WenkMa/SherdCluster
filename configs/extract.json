@@ -1,0 +1,9 @@
+{
+  "checkpoint": "outputs/train/checkpoint_epoch15.pt",
+  "image_dir": "data/images",
+  "output": "outputs/features",
+  "batch_size": 16,
+  "workers": 4,
+  "image_size": 320,
+  "preprocessing": "full_global"
+}
