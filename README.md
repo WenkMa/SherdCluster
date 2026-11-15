@@ -1,46 +1,52 @@
-# SherdCluster 使用说明
+# SherdCluster User Guide
 
-本目录实现双表面 BYOL 自监督特征学习、特征检索评估、一致性约束聚类和聚类评估。
-命令均在本目录执行；迁移到其他机器时，将下面的 cd 路径换成实际存放位置。
+English | [简体中文](README.zh-CN.md)
 
-GitHub 仓库不包含原始图像。代码、配置、参考数据和已有验证结果位于 `main` 分支；
-五个模型与特征文件保存在 [GitHub Release](https://github.com/WenkMa/SherdCluster/releases/tag/reproducibility-assets-v1)。
-克隆仓库后，在仓库根目录执行以下 GitHub CLI 命令，下载需要的文件：
+This repository implements dual-surface BYOL self-supervised representation learning,
+retrieval evaluation, consistency-constrained clustering, and clustering evaluation
+for archaeological pottery sherds. Run commands from the repository root. When moving
+the project to another machine, replace the example `cd` path with its actual location.
+
+Original images are excluded from GitHub. The `main` branch contains code,
+configurations, reference data, and saved validation results. The five model and
+feature files are available in the [GitHub Release](https://github.com/WenkMa/SherdCluster/releases/tag/reproducibility-assets-v1).
+After cloning, run these GitHub CLI commands from the repository root:
 
 ```bash
 gh release download reproducibility-assets-v1 --repo WenkMa/SherdCluster --pattern '*.npz' --dir data/features
 gh release download reproducibility-assets-v1 --repo WenkMa/SherdCluster --pattern '*.pth' --pattern '*.pt' --dir weights
 ```
 
-也可以从 Release 页面手动下载，并放到下表所列路径：
+Alternatively, download the assets manually and place them at these paths:
 
-| Release 文件 | 本地存放路径 | 用途 |
+| Release asset | Local path | Purpose |
 | --- | --- | --- |
-| `exterior.npz` | `data/features/exterior.npz` | 外侧表示的检索评估 |
-| `interior.npz` | `data/features/interior.npz` | 内侧表示的检索评估 |
-| `both_concat.npz` | `data/features/both_concat.npz` | 融合表示的检索与聚类 |
-| `resnet50_imagenet1k_v2.pth` | `weights/resnet50_imagenet1k_v2.pth` | 从 ImageNet 权重开始新微调 |
-| `sherdcluster_epoch15.pt` | `weights/sherdcluster_epoch15.pt` | 使用已有陶片模型重新提取特征 |
+| `exterior.npz` | `data/features/exterior.npz` | Retrieval evaluation of exterior descriptors |
+| `interior.npz` | `data/features/interior.npz` | Retrieval evaluation of interior descriptors |
+| `both_concat.npz` | `data/features/both_concat.npz` | Retrieval and clustering with concatenated descriptors |
+| `resnet50_imagenet1k_v2.pth` | `weights/resnet50_imagenet1k_v2.pth` | Start fine-tuning from ImageNet weights |
+| `sherdcluster_epoch15.pt` | `weights/sherdcluster_epoch15.pt` | Extract features using the supplied sherd-domain model |
 
-只验证已有特征的检索和聚类时，下载三个 `.npz` 文件即可。
-如需从图像提取特征或微调，请下载相应权重，并另行将成对 PNG 图像放入 `data/images/`。
-本地已有这些文件时可直接使用，无需重复下载。下载目录由命令自动创建。
+For retrieval and clustering evaluation using the supplied features, download the
+three `.npz` files. Feature extraction and fine-tuning additionally require the
+corresponding weights and paired PNG images in `data/images/`. Existing local files
+can be used directly. The download commands create the destination directories.
 
 ```bash
 cd /home/wenkang/SherdCluster_reproducibility
 ```
 
-根据目的选择操作：
+Choose the workflow for your task:
 
-- 只验证已有特征的检索表现：第 3 节。
-- 重新聚类并验证已知配对是否保留：第 4 节。
-- 从已有陶片模型重新提取特征再验证：第 5 节。
-- 从 ImageNet 权重开始一次新的微调：第 6 节。
-- 分步训练、提取、聚类、评估或断点续训：第 7 节。
+- Evaluate retrieval using the supplied features: Section 3.
+- Recompute clusters and measure known-pair retention: Section 4.
+- Extract features using the supplied sherd-domain model, then evaluate: Section 5.
+- Start a new fine-tuning run from ImageNet weights: Section 6.
+- Run individual stages or resume interrupted training: Section 7.
 
-## 1. 环境与设备
+## 1. Environment and device
 
-依赖版本以 requirements.txt 为准。建议在独立环境中安装：
+Dependency versions are specified in `requirements.txt`. An isolated environment is recommended:
 
 ```bash
 conda create -n sherdcluster python=3.10 -y
@@ -49,80 +55,88 @@ python -m pip install torch==2.5.0 torchvision==0.20.0 --index-url https://downl
 python -m pip install -r requirements.txt
 ```
 
-上述 PyTorch 安装命令使用 CUDA 12.4 wheel，需要兼容的 NVIDIA 驱动。
-已有可用环境时可直接使用；安装步骤无需每次重复执行。
-原记录的训练环境为 Python 3.10、PyTorch 2.5.0+cu124、torchvision 0.20.0、
-NumPy 2.2.6、Pillow 12.2.0 和 RTX 4090（24 GB）。
+The PyTorch command uses CUDA 12.4 wheels and requires a compatible NVIDIA driver.
+You can use an existing working environment; installation need not be repeated for
+each experiment. The recorded training environment used Python 3.10, PyTorch
+2.5.0+cu124, torchvision 0.20.0, NumPy 2.2.6, Pillow 12.2.0, and an RTX 4090 (24 GB).
 
-以下示例使用一张 GPU。先查看设备，并将 1 换成实际要使用的物理 GPU 编号：
+The examples use one GPU. Inspect the devices and replace `1` with the physical GPU
+index you want to use:
 
 ```bash
 nvidia-smi
 export CUDA_VISIBLE_DEVICES=1
 ```
 
-设置后，这张物理 GPU 在当前终端启动的程序中对应 --device cuda:0。
-各命令也支持 --device cpu；完整训练建议使用 GPU。
-所有输出目录必须是尚不存在的新目录。重复实验时更换 --output 路径。
-run.py reproduce 固定写入 outputs/clusters/ 和 outputs/evaluation/；如它们已存在，
-请使用第 3、4 节中可指定新输出路径的分步命令。
+The selected physical GPU is exposed as `--device cuda:0` to programs started from
+that terminal. Commands also accept `--device cpu`; a GPU is recommended for full training.
+Each output directory must be a new, nonexistent directory. Change `--output` for
+repeated experiments. `run.py reproduce` always writes to `outputs/clusters/` and
+`outputs/evaluation/`. If those directories already exist, use Sections 3 and 4 to
+select different output paths.
 
-## 2. 输入文件与数据准备
+## 2. Input files and data preparation
 
-主要文件：
+Main files:
 
-| 文件 | 用途 |
+| File | Purpose |
 | --- | --- |
-| `train_byol_global_sides.py` | 双表面三视图 BYOL 微调 |
-| `global_sides_transforms.py` | 训练增强与推理预处理 |
-| `extract_byol_global_sides.py` | 从 online encoder 提取特征 |
-| `cluster.py` | 相互近邻与全成员相似度约束聚类 |
-| `evaluate.py` | 特征检索评估、参考配对同簇保留率评估 |
-| `run.py` | 各阶段入口，读取 configs/ 中的对应配置 |
-| `run_fresh.py` | 新微调 -> 提取 -> 聚类 -> 评估的一键流程 |
-| `configs/train.json` | 微调配置 |
-| `configs/extract.json` | 特征提取配置 |
-| `configs/cluster.json` | 聚类配置 |
-| `weights/resnet50_imagenet1k_v2.pth` | 新微调所需的 ImageNet 初始化权重 |
-| `weights/sherdcluster_epoch15.pt` | 已有陶片模型，可用于直接提取特征 |
-| `data/features/*.npz` | 已有模型的外侧、内侧及融合特征 |
-| `data/reference_pairs.csv` | 评估用的 251 对已知陶片关系 |
-| `data/collection_ids.txt` | 完整藏品清单，共 17,609 个 ID |
-| `data/images/` | 原始前景图像，需单独准备，不随 GitHub 仓库上传 |
-| `outputs/` | 每次实验生成的结果 |
+| `train_byol_global_sides.py` | Dual-surface, three-view BYOL fine-tuning |
+| `global_sides_transforms.py` | Training augmentation and inference preprocessing |
+| `extract_byol_global_sides.py` | Extract features from the online encoder |
+| `cluster.py` | Clustering with mutual neighbors and all-member similarity constraints |
+| `evaluate.py` | Retrieval evaluation and known-pair cluster retention evaluation |
+| `run.py` | Stage entry point using corresponding configurations in `configs/` |
+| `run_fresh.py` | New fine-tuning → extraction → clustering → evaluation |
+| `configs/train.json` | Fine-tuning configuration |
+| `configs/extract.json` | Feature extraction configuration |
+| `configs/cluster.json` | Clustering configuration |
+| `weights/resnet50_imagenet1k_v2.pth` | ImageNet initialization for new fine-tuning |
+| `weights/sherdcluster_epoch15.pt` | Supplied sherd-domain model for feature extraction |
+| `data/features/*.npz` | Supplied exterior, interior, and concatenated features |
+| `data/reference_pairs.csv` | 251 known sherd pairs used for evaluation |
+| `data/collection_ids.txt` | Complete inventory of 17,609 specimen IDs |
+| `data/images/` | Original foreground images; prepare separately, excluded from GitHub |
+| `outputs/` | Results generated by experiments |
 
-直接使用已有特征进行第 3、4 节的验证，只需对应脚本、特征、参考配对和清单。
-从图像重新提取或微调还需要图像及相应权重。迁移项目时需一并传输所需文件。
+Sections 3 and 4 require the relevant scripts, feature banks, reference pairs, and
+inventory. Extracting features or fine-tuning also requires images and the corresponding
+weights. Transfer the required files when moving the project.
 
-图像必须直接放在 data/images/ 下，使用区分大小写的 PNG 文件名：
+Place images directly in `data/images/` using these case-sensitive PNG filenames:
 
 ```text
 JD00001_exterior.png
 JD00001_interior.png
 ```
 
-同一件陶片使用相同 ID；不扫描子目录。训练和提取仅使用内外侧均存在的陶片。
-当前数据有 17,580 件完整配对陶片，另有 29 件缺少一侧图像。
-图像按完整范围保留长宽比，白色补边并缩放至 320 x 320；透明区域合成白色。
-程序不执行前景分割或字迹去除，验证原方法时应使用相同的输入照片。
+Use the same specimen ID for both surfaces of a sherd. Subdirectories are not scanned.
+Training and extraction use only specimens with both surfaces available. The supplied
+data covers 17,580 paired specimens and 29 additional specimens missing one surface image.
+Preprocessing preserves the full image extent and aspect ratio, adds white padding,
+and produces 320 × 320 images. Transparent areas are composited on white. The program
+does not segment foregrounds or remove specimen writing. Use the same photographs
+when validating the original method.
 
-特征 .npz 文件包含：
+Each feature `.npz` file contains:
 
-- sample_ids: 陶片 ID，长度 N。
-- features: float32 特征矩阵，形状 N x D。
-- metadata_json: 特征来源和预处理信息。
+- `sample_ids`: an array of N specimen IDs.
+- `features`: a float32 feature matrix with shape N × D.
+- `metadata_json`: feature provenance and preprocessing information.
 
-exterior.npz、interior.npz 的 D=2048，both_concat.npz 的 D=4096。
-内外侧特征分别归一化后直接拼接，检索和聚类时再对整条向量归一化。
-推理使用共享 ResNet50 online encoder 的输出，不使用投影头或额外学习的融合模块。
+For `exterior.npz` and `interior.npz`, D=2048; for `both_concat.npz`, D=4096.
+Surface descriptors are individually normalized and directly concatenated; retrieval
+and clustering normalize the concatenated vector again. Inference uses the shared
+ResNet50 online encoder output, without a projection head or an additional learned fusion module.
 
-reference_pairs.csv 的表头为 id_a,id_b，每行一对已知关系；不得重复或自身配对。
-collection_ids.txt 每行一个唯一 ID；清单必须包含当前特征中的全部 ID。
-参考配对只供 evaluate.py 读取，训练和聚类均不读取这些关系。
+`reference_pairs.csv` has the header `id_a,id_b`, with one known relation per row.
+Duplicate undirected pairs and self-pairs are invalid. `collection_ids.txt` contains
+one unique ID per line and must include every ID in the feature bank. Only
+`evaluate.py` reads the reference pairs; training and clustering do not use them.
 
-## 3. 验证特征表达：检索评估
+## 3. Validate feature representations: retrieval evaluation
 
-用已有的三套特征分别验证外侧、内侧、内外侧融合表示：
+Evaluate the supplied exterior, interior, and concatenated feature banks:
 
 ```bash
 python evaluate.py \
@@ -132,28 +146,34 @@ python evaluate.py \
   --device cuda:0
 ```
 
-这一步无需训练、加载陶片模型或读取图像，也不执行聚类。
-以参考关系涉及的 485 个不同陶片 ID 为查询，在 17,580 件陶片中按余弦相似度排序。
-每个查询排除自身；相似度相同时按陶片 ID 字典序排序。
-Hit@K = 前 K 个结果中至少有一个已知配对陶片的查询数 / 查询总数 x 100%。
-报告 K=1、5、10。该指标衡量已知关系的检索命中率，不是所有相关陶片的完整召回率。
-参考配对中的全部 ID 都必须存在于每一套被评估的特征中。
+This step operates directly on feature banks, without training, loading model weights,
+reading images, or running clustering. The 485 distinct specimen IDs involved in the
+reference pairs are queries against a gallery of 17,580 specimens ranked by cosine
+similarity. Each query excludes itself; ties are resolved by lexical specimen ID order.
 
-查看：
+**Hit@K = queries with at least one known partner in the first K results / total queries × 100%.**
 
-- `outputs/paper_retrieval/metrics.json`
-  representation 中的 hit_counts、hit_percent、query_count、gallery_size。
+The program reports K=1, 5, and 10. This measures retrieval hits for known relations;
+it does not measure complete recall of every relevant sherd. Every reference-pair ID
+must be present in each feature bank being evaluated.
+
+Inspect these outputs:
+
+- `outputs/paper_retrieval/metrics.json`: `hit_counts`, `hit_percent`, `query_count`,
+  and `gallery_size` under `representation`.
 - `outputs/paper_retrieval/exterior_queries.csv`
 - `outputs/paper_retrieval/interior_queries.csv`
 - `outputs/paper_retrieval/both_concat_queries.csv`
-  每个查询的已知配对、最佳配对排名和 Top-10 检索 ID。
 
-只评估融合特征时，--features 后只保留 data/features/both_concat.npz，
-并使用新的输出目录。评估新提取的特征时，将三个输入路径换成新特征目录。
+The query CSV files contain known partners, the best partner rank, and Top-10 retrieved
+IDs for each query. To evaluate concatenated features alone, keep only
+`data/features/both_concat.npz` after `--features` and select a new output directory.
+To evaluate new features, replace the three input paths with the new feature bank paths.
 
-## 4. 验证聚类：先重新聚类，再评估
+## 4. Validate clustering: recompute clusters, then evaluate
 
-第一步：使用已有融合特征计算相互近邻图并执行约束合并：
+First, build the mutual-neighbor graph and run constrained cluster merging using
+the supplied concatenated features:
 
 ```bash
 python cluster.py \
@@ -164,25 +184,28 @@ python cluster.py \
   --device cuda:0
 ```
 
-默认采用 mutual top-10 近邻；候选边相似度至少为 eta=0.50。
-按相似度从高到低处理候选边，每次合并要求两个簇之间的所有成员相似度均不低于
-rho=0.55。没有预设簇数或簇大小上限，参考配对不参与建图或合并。
-提供完整清单后，29 件没有双表面特征的陶片各自保留为单件簇。
-若省略 --collection-ids，则仅对有特征的 17,580 件陶片输出分组。
-完整相似度矩阵会临时占用约 1.24 GB 磁盘空间，聚类成功结束后自动删除。
+The default uses mutual top-10 neighbors and candidate edges with similarity at least
+eta=0.50. Edges are processed in descending similarity order. A merge requires every
+cross-cluster member similarity to be at least rho=0.55. There is no prescribed cluster
+count or cluster-size cap. Reference pairs do not enter graph construction or merging.
 
-聚类输出：
+With the complete inventory, the 29 specimens lacking dual-surface descriptors remain
+individual singleton clusters. Omitting `--collection-ids` produces assignments only
+for the 17,580 specimens with features. The full similarity matrix temporarily occupies
+approximately 1.24 GB of disk space and is deleted after successful clustering.
 
-- `outputs/paper_clusters/assignments.csv`
-  sample_id、cluster_id、cluster_size、status，每件陶片一行。
-- `outputs/paper_clusters/clusters.csv`
-  每个簇的大小、内部配对数及最小相似度。
-- `outputs/paper_clusters/summary.json`
-  聚类参数、簇数、单件簇数、最大簇大小及合并统计。
-- `outputs/paper_clusters/graph.npz`
-  有特征陶片的近邻索引、候选边及其相似度。
+Clustering outputs:
 
-第二步：独立评估输出分组：
+- `outputs/paper_clusters/assignments.csv`: one row per specimen with `sample_id`,
+  `cluster_id`, `cluster_size`, and `status`.
+- `outputs/paper_clusters/clusters.csv`: cluster sizes, within-cluster pair counts,
+  and minimum similarities.
+- `outputs/paper_clusters/summary.json`: parameters, cluster counts, singleton counts,
+  maximum cluster size, and merge statistics.
+- `outputs/paper_clusters/graph.npz`: neighbor indices, candidate edges, and similarities
+  for specimens with features.
+
+Second, independently evaluate the resulting partition:
 
 ```bash
 python evaluate.py \
@@ -192,29 +215,32 @@ python evaluate.py \
   --device cpu
 ```
 
-这一步只读取分组和参考配对，不需要图像、特征或 GPU。
-查看 outputs/paper_partition_eval/metrics.json 中的 clustering：
+This step reads only assignments and reference pairs; it requires no images, features,
+or GPU. Inspect `clustering` in `outputs/paper_partition_eval/metrics.json`:
 
-- retained_pairs: 已知配对中两个陶片被分入同一簇的数量。
-- retention_percent: retained_pairs / reference_pairs x 100%。
-- total_sherds、clusters、singletons、max_cluster_size: 分组规模统计。
+- `retained_pairs`: known pairs whose specimens are assigned to the same cluster.
+- `retention_percent`: `retained_pairs / reference_pairs × 100%`.
+- `total_sherds`, `clusters`, `singletons`, and `max_cluster_size`: partition statistics.
 
-逐对结果在 outputs/paper_partition_eval/reference_pair_outcomes.csv。
-参考配对同簇保留率不能单独表示整体聚类准确率；当前参考关系未提供完整分组真值，
-此评估不报告全体陶片的聚类准确率、ARI 或 NMI。
+Per-pair results are saved to `outputs/paper_partition_eval/reference_pair_outcomes.csv`.
+Known-pair retention alone does not establish overall clustering accuracy. The reference
+relations do not provide complete partition ground truth, so this evaluation does not
+report overall clustering accuracy, ARI, or NMI.
 
-也可以一条命令重算已有融合特征的聚类，并评估三套特征的检索和聚类结果：
+Alternatively, use one command to recompute clustering from supplied concatenated
+features and evaluate retrieval for all three feature banks and known-pair retention:
 
 ```bash
 python run.py reproduce --device cuda:0
 ```
 
-该入口使用 data/features/、configs/cluster.json 和默认参考配对，
-结果固定写入 outputs/clusters/ 与 outputs/evaluation/，不执行训练或特征提取。
+This uses `data/features/`, `configs/cluster.json`, and the default reference pairs.
+It writes to `outputs/clusters/` and `outputs/evaluation/`, without training or extraction.
 
-## 5. 从已有陶片模型重新提取特征，再验证
+## 5. Extract features from the supplied sherd-domain model, then evaluate
 
-如果希望验证“图像 -> 模型 -> 特征 -> 检索/聚类”的完整推理过程：
+To validate the full inference path from images through the model and descriptors
+to retrieval and clustering:
 
 ```bash
 python extract_byol_global_sides.py \
@@ -225,16 +251,18 @@ python extract_byol_global_sides.py \
   --device cuda:0
 ```
 
-输出 exterior.npz、interior.npz、both_concat.npz 和自动生成的来源说明 metadata.json。
-随后执行第 3、4 节的命令，将 data/features/ 替换成 outputs/paper_reextracted/，
-并为检索、聚类和聚类评估分别指定新的输出目录。
-该流程使用已有陶片模型的固定权重，不更新模型参数。
+Outputs are `exterior.npz`, `interior.npz`, `both_concat.npz`, and the automatically
+generated provenance file `metadata.json`. Then run Sections 3 and 4, replacing
+`data/features/` with `outputs/paper_reextracted/`. Select new output directories
+for retrieval, clustering, and partition evaluation. Model weights remain fixed.
 
-## 6. 从 0 开始新的微调：一键完成全部阶段
+## 6. Start a new fine-tuning run: the full pipeline
 
-这里的“从 0 微调”指从 ImageNet IMAGENET1K_V2 预训练 ResNet50 开始新的陶片训练。
-不加载已有陶片模型、历史特征或历史聚类结果；当前入口不提供随机初始化骨干的训练方式。
-需要完整配对图像和 weights/resnet50_imagenet1k_v2.pth。
+A new fine-tuning run initializes ResNet50 with ImageNet IMAGENET1K_V2 pretrained
+weights. It does not load the supplied sherd-domain checkpoint, historical features,
+or historical clustering results. The current entry point does not provide training
+with a randomly initialized backbone. Paired images and
+`weights/resnet50_imagenet1k_v2.pth` are required.
 
 ```bash
 python run_fresh.py \
@@ -245,60 +273,68 @@ python run_fresh.py \
   --workers 4
 ```
 
-执行顺序：
+The pipeline performs these stages:
 
-1. 读取 configs/train.json，从本地 ImageNet 权重开始双表面 BYOL 自监督微调。
-2. 使用此次生成的 train/checkpoint_epoch15.pt 提取全部配对图像的新特征。
-3. 使用此次生成的 features/both_concat.npz 进行约束聚类。
-4. 使用此次生成的三套特征和聚类分组，分别计算检索指标与参考配对同簇保留率。
+1. Read `configs/train.json` and fine-tune dual-surface BYOL from local ImageNet weights.
+2. Extract features from all paired images using this run's `train/checkpoint_epoch15.pt`.
+3. Cluster this run's `features/both_concat.npz` using the consistency constraints.
+4. Evaluate retrieval and known-pair retention using the new features and assignments.
 
-训练配置：
+Training configuration:
 
-- 实际训练 15 个 epoch，余弦学习率调度的总周期为 100 个 epoch。
-- --epochs 100 --stop-after-epoch 15 保留原方法的前 15 轮学习率轨迹；
-- 将 --epochs 改成 15 会改变学习率轨迹。
-- batch size=32 件陶片，每件陶片内外侧各生成 3 个视图。
-- 共享编码器，每侧独立计算 6 个有向跨视图预测损失，再将两侧损失相加更新一次。
-- 不使用跨表面正样本、跨陶片配对标注或聚类结果作为训练监督。
-- AdamW；骨干学习率 1e-4，投影/预测头学习率 3e-4；weight decay=1e-4。
-- 图像 320 x 320，FP32，梯度裁剪 1.0，EMA 动量 0.996，seed=42。
-- 全部骨干层参与微调；MLP 隐藏/输出维度为 4096/256。
+- Train for 15 actual epochs with a cosine learning-rate schedule spanning 100 epochs.
+  `--epochs 100 --stop-after-epoch 15` preserves the original method's first 15 epochs
+  of learning rates; setting `--epochs 15` changes the schedule.
+- Batch size: 32 sherds, with three views for each surface.
+- A shared encoder computes six directed cross-view prediction losses independently
+  for each surface; the two surface losses are summed for one update.
+- No cross-surface positives, cross-sherd relation annotations, or clustering results
+  are used as training supervision.
+- AdamW; backbone learning rate 1e-4, projection/prediction head learning rate 3e-4,
+  and weight decay 1e-4.
+- 320 × 320 images, FP32, gradient clipping at 1.0, EMA momentum 0.996, and seed 42.
+- All backbone layers are fine-tuned. MLP hidden/output dimensions are 4096/256.
 
-训练开始前会扫描配对图像并读取文件内容记录输入签名，初始化阶段可能需要等待。
-日志和主要结果：
+Before training, the program scans paired images and reads their contents to record
+an input signature. Initialization can therefore take some time. Logs and main outputs:
 
-| 文件 | 用途 |
+| File | Purpose |
 | --- | --- |
-| `outputs/fresh_run/status.json` | 流程状态和已完成阶段 |
-| `outputs/fresh_run/training.log` | 训练日志 |
-| `outputs/fresh_run/extraction.log` | 提取日志 |
-| `outputs/fresh_run/clustering.log` | 聚类日志 |
-| `outputs/fresh_run/evaluation.log` | 评估日志 |
-| `outputs/fresh_run/train/config.json` | 实际训练配置 |
-| `outputs/fresh_run/train/history.jsonl` | 各 epoch 的损失及特征监控信息 |
-| `outputs/fresh_run/train/last.pt` | 最近完成 epoch 的完整训练断点 |
-| `outputs/fresh_run/train/checkpoint_epoch15.pt` | 第 15 轮模型 |
-| `outputs/fresh_run/features/*.npz` | 本次新模型的特征 |
-| `outputs/fresh_run/clusters/assignments.csv` | 本次聚类分组 |
-| `outputs/fresh_run/clusters/summary.json` | 本次聚类统计 |
-| `outputs/fresh_run/evaluation/metrics.json` | 本次检索与聚类评估指标 |
+| `outputs/fresh_run/status.json` | Pipeline state and completed stages |
+| `outputs/fresh_run/training.log` | Training log |
+| `outputs/fresh_run/extraction.log` | Extraction log |
+| `outputs/fresh_run/clustering.log` | Clustering log |
+| `outputs/fresh_run/evaluation.log` | Evaluation log |
+| `outputs/fresh_run/train/config.json` | Actual training configuration |
+| `outputs/fresh_run/train/history.jsonl` | Per-epoch losses and feature monitoring |
+| `outputs/fresh_run/train/last.pt` | Full checkpoint from the latest completed epoch |
+| `outputs/fresh_run/train/checkpoint_epoch15.pt` | Epoch-15 model |
+| `outputs/fresh_run/features/*.npz` | Features from the new model |
+| `outputs/fresh_run/clusters/assignments.csv` | New cluster assignments |
+| `outputs/fresh_run/clusters/summary.json` | New clustering statistics |
+| `outputs/fresh_run/evaluation/metrics.json` | New retrieval and clustering metrics |
 
-在另一终端查看进度：
+Monitor progress from another terminal:
 
 ```bash
 tail -f outputs/fresh_run/training.log
 ```
 
-全部成功时 status.json 的 state 为 complete，且 evaluation/metrics.json 已生成。
-只看到训练完成并不表示后续提取、聚类和评估均已完成。
-该一键流程固定按第 15 轮模型继续提取。若要改变训练轮数，使用第 7 节分步流程，
-并将提取步骤的 checkpoint 路径改成实际保存的轮数。
-训练固定种子但未强制完全确定性的 GPU 运算，新微调的指标可能与已有模型不同。
-本目录已实际跑通已有特征的检索和聚类评估；本次文档更新未重新执行完整微调。
+The full pipeline succeeds when `state` in `status.json` is `complete` and
+`evaluation/metrics.json` exists. Finishing training alone does not mean extraction,
+clustering, and evaluation have also finished. The one-command pipeline extracts from
+the epoch-15 checkpoint. To change the training duration, use Section 7 and point
+extraction to the checkpoint for the actual saved epoch.
 
-## 7. 分步微调与断点续训
+Training uses a fixed seed but does not enforce fully deterministic GPU computation,
+so new runs can produce different metrics from the supplied model. Retrieval and
+clustering with the supplied features have been run successfully; this documentation
+update did not rerun full fine-tuning.
 
-希望分别控制各阶段时，按以下顺序执行。下面所有命令使用同一套新模型及新特征：
+## 7. Individual stages and resuming training
+
+To control each stage separately, run these commands in order. All stages below use
+the same new model and its newly extracted features:
 
 ```bash
 python run.py train --output outputs/manual_run/train --device cuda:0
@@ -327,15 +363,18 @@ python evaluate.py \
   --device cuda:0
 ```
 
-run.py train/extract/cluster 分别读取 configs/train.json、extract.json、cluster.json。
-上面的命令覆盖其中的输出、模型或特征路径，其他参数保持原配置。
-更换图像目录时，训练和提取两步都加 --image-dir 实际目录。
-更换藏品清单时，聚类加 --collection-ids 实际清单。
-可通过对应阶段的 --config 指定另一份 JSON 配置，或通过命令行覆盖参数。
-run.py evaluate 默认只评估 outputs/features/ 的检索；若还要评估聚类，
-需额外提供 --assignments，或像上面一样直接调用 evaluate.py。
+`run.py train`, `run.py extract`, and `run.py cluster` read `configs/train.json`,
+`configs/extract.json`, and `configs/cluster.json`, respectively. These commands
+override output, model, or feature paths while retaining other configured values.
+For a different image directory, add `--image-dir YOUR_DIRECTORY` to both training
+and extraction. For a different inventory, add `--collection-ids YOUR_INVENTORY`
+to clustering. Use `--config` to select another JSON configuration for the stage,
+or override parameters on the command line.
 
-如新微调在第 15 轮之前中断，可从最近完整 epoch 的 last.pt 恢复：
+`run.py evaluate` evaluates retrieval from `outputs/features/` by default. To also
+evaluate clustering, supply `--assignments`, or call `evaluate.py` directly as above.
+
+If training is interrupted before epoch 15, resume from the latest completed epoch's `last.pt`:
 
 ```bash
 python run.py train \
@@ -344,63 +383,73 @@ python run.py train \
   --device cuda:0
 ```
 
-此示例适用于第 6 节的默认训练配置；恢复时须保留原图像内容、训练超参数及
-100 轮调度总周期。若原来改过配置，恢复时也要提供相同配置。
---resume 恢复模型、优化器、scaler 和随机数状态，从已完成 epoch 之后继续；
-不恢复被中断 epoch 的批次进度，输出目录仍须使用新路径。
-已完成第 15 轮的断点不能以相同的停止轮数继续训练。
-恢复完成后，使用 outputs/resumed_train/checkpoint_epoch15.pt 提取特征，
-再按第 3、4 节或本节分步命令执行检索、聚类和评估。
-run_fresh.py 本身不提供 --resume，也不会自动跳过已完成阶段。
-如需从已有 BYOL 模型启动另一轮微调，训练脚本另支持 --init-checkpoint；
-该选项仅加载模型参数并重新创建优化器，区别于保留训练进度的 --resume。
+This example assumes the default configuration in Section 6. Preserve input image
+contents, training hyperparameters, and the 100-epoch schedule horizon. If you
+changed the original configuration, provide the same settings when resuming.
+`--resume` restores the model, optimizer, scaler, and random number generator states,
+then continues after the last completed epoch. Batch progress within an interrupted
+epoch is not restored. The resumed run requires a new output directory. A checkpoint
+already at epoch 15 cannot continue with the same stopping epoch.
 
-## 8. 已有特征的实际验证结果
+After resuming, extract features using `outputs/resumed_train/checkpoint_epoch15.pt`,
+then run retrieval, clustering, and evaluation using Sections 3 and 4 or the commands
+above. `run_fresh.py` has no `--resume` option and does not automatically skip completed
+stages. To start another fine-tuning run from an existing BYOL model, the training
+script also supports `--init-checkpoint`. This loads model parameters and creates
+a new optimizer, whereas `--resume` preserves training progress.
 
-以下为本目录已有特征的实际运行结果，可用来核对操作是否正确。
-不作为新微调必须达到的数值，也不表示模型在独立留出测试集上的泛化表现。
+## 8. Measured results using the supplied features
 
-| 特征 | Hit@1 | Hit@5 | Hit@10 |
+These results were obtained by running the supplied feature banks and can help check
+that evaluation was executed correctly. They are not required targets for new runs
+and do not establish generalization on an independent held-out test set.
+
+| Features | Hit@1 | Hit@5 | Hit@10 |
 | --- | ---: | ---: | ---: |
-| 外侧 | 30.31% | 51.55% | 61.24% |
-| 内侧 | 21.24% | 36.49% | 46.80% |
-| 内外侧融合 | 52.78% | 75.67% | 81.86% |
+| Exterior | 30.31% | 51.55% | 61.24% |
+| Interior | 21.24% | 36.49% | 46.80% |
+| Exterior + interior concatenation | 52.78% | 75.67% | 81.86% |
 
-聚类参数 k=10、eta=0.50、rho=0.55、mutual kNN，并包含完整藏品清单：
+Clustering used k=10, eta=0.50, rho=0.55, mutual kNN, and the complete inventory:
 
-- 总陶片 17,609；总簇数 8,128；单件簇 2,877；最大簇 16 件。
-- 251 对已知关系中 154 对同簇，保留率 61.35%。
+- 17,609 specimens; 8,128 clusters; 2,877 singleton clusters; maximum cluster size 16.
+- 154 of the 251 known pairs were retained within clusters: 61.35% retention.
 
-已保存的结果：
+Saved results:
 
 - `outputs/validation_20261115_112205/evaluation/metrics.json`
 - `outputs/validation_20261115_112205/clusters/assignments.csv`
 - `outputs/validation_20261115_112205/clusters/summary.json`
 
-这次已有特征验证使用 Python 3.13.13、PyTorch 2.6.0+cu124、NumPy 2.5.1；
-它仅确认此环境下检索与聚类可运行，不替代完整训练环境的验证。
+This supplied-feature validation used Python 3.13.13, PyTorch 2.6.0+cu124, and NumPy 2.5.1.
+It confirms retrieval and clustering run in that environment; it does not replace
+validation of the full training environment.
 
-## 9. 其他数据与方法细节
+## 9. Other datasets and method details
 
-用于其他批次陶片时，提供该批次的成对图像和完整 ID 清单。
-训练、提取和聚类不需要参考配对；若要定量评估检索或配对保留率，
-还须提供该批次自己的 id_a,id_b CSV，并在 evaluate.py 中通过 --pairs 指定。
-run_fresh.py 的最终评估固定使用 data/reference_pairs.csv；其他数据的独立实验
-建议采用第 7 节的分步命令，并在评估时显式设置 --pairs。
+For another assemblage, provide its paired images and complete ID inventory.
+Training, extraction, and clustering do not require reference pairs. Quantitative
+retrieval or pair-retention evaluation requires that assemblage's own `id_a,id_b`
+CSV, supplied through `evaluate.py --pairs`. The final evaluation in `run_fresh.py`
+uses `data/reference_pairs.csv`. For independent experiments on another dataset,
+use Section 7 and explicitly set `--pairs` during evaluation.
 
-训练视图：
+Training views:
 
-- 视图 0：完整范围，水平翻转概率 0.5。
-- 视图 1：宽高保留 95%-100%，水平翻转概率 0.5，旋转 +/-10 度。
-- 视图 2：宽高保留 97%-100%，透视概率 0.3、强度 0.05，旋转 +/-5 度，
-  垂直翻转概率 0.3。
+- View 0: full image extent; horizontal flip probability 0.5.
+- View 1: retain 95%–100% of width and height; horizontal flip probability 0.5;
+  rotation ±10 degrees.
+- View 2: retain 97%–100%; perspective probability 0.3 with strength 0.05;
+  rotation ±5 degrees; vertical flip probability 0.3.
 
-全部视图保留长宽比，每侧白边 4%，使用 ImageNet 归一化；无随机光度扰动。
-提取时关闭随机增强。target 网络的参数使用 EMA，BN 运行统计由其自身前向更新。
+All views preserve aspect ratio, use 4% white padding per side and ImageNet
+normalization, and apply no random photometric perturbation. Random augmentation
+is disabled during extraction. Target network parameters use EMA; batch-normalization
+running statistics are updated by the target network's own forward passes.
 
-聚类消融参数：
+Clustering ablations:
 
-- --union-knn: 使用任一方向近邻关系，替代 mutual kNN。
-- --no-all-pairs: 关闭所有跨簇成员相似度的合并约束。
+- `--union-knn`: use a neighbor relation in either direction instead of mutual kNN.
+- `--no-all-pairs`: disable the cross-cluster all-member similarity constraint.
 
-这些参数会改变原方法的默认行为，应使用独立输出目录保存结果。
+These options change the default method. Save each ablation in its own output directory.
