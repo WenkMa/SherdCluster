@@ -1,2 +1,0 @@
-"""Sherd pairing agents."""
-
